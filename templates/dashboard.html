@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PayFlow Chain Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-100 font-sans min-h-screen">
+    <div class="container mx-auto px-4 py-10 max-w-5xl">
+        <div class="text-center mb-10">
+            <h1 class="text-4xl font-extrabold text-blue-700 tracking-tight mb-2">PayFlow Chain Dashboard</h1>
+            <p class="text-gray-600 text-lg">Scalability Simulation for High-Frequency Payment Systems</p>
+        </div>
+        
+        <div class="flex justify-center mb-10">
+            <button id="runBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-full shadow-xl transition-all duration-300 transform hover:scale-105 flex items-center space-x-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Run Simulation & Update Blockchain</span>
+            </button>
+        </div>
+
+        <!-- Metrics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 hidden opacity-0 transition-opacity duration-500" id="metricsCards">
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-red-500 relative overflow-hidden">
+                <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-red-100 rounded-full opacity-50"></div>
+                <h3 class="text-gray-500 text-xs font-bold uppercase tracking-wider">Before (Traditional)</h3>
+                <p class="text-4xl font-black text-gray-800 mt-2 relative z-10"><span id="beforeGas">0</span></p>
+                <p class="text-sm text-gray-500 mt-1 relative z-10">Blockchain Calls / Gas</p>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500 relative overflow-hidden">
+                <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-green-100 rounded-full opacity-50"></div>
+                <h3 class="text-gray-500 text-xs font-bold uppercase tracking-wider">After (PayFlow Rollup)</h3>
+                <p class="text-4xl font-black text-gray-800 mt-2 relative z-10"><span id="afterGas">0</span></p>
+                <p class="text-sm text-gray-500 mt-1 relative z-10">Blockchain Calls / Gas</p>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500 relative overflow-hidden">
+                <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-blue-100 rounded-full opacity-50"></div>
+                <h3 class="text-gray-500 text-xs font-bold uppercase tracking-wider">Total Reduction</h3>
+                <p class="text-4xl font-black text-blue-600 mt-2 relative z-10"><span id="reduction">0</span>%</p>
+                <p class="text-sm text-gray-500 mt-1 relative z-10">Improvement in Scalability</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 hidden opacity-0 transition-opacity duration-500" id="mainContent">
+            <!-- Chart Container -->
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-xl font-bold mb-6 text-gray-800 border-b pb-2">Scalability Improvement</h2>
+                <div class="relative h-64">
+                    <canvas id="reductionChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Balances -->
+            <div class="bg-white rounded-xl shadow-lg p-6 flex flex-col">
+                <h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Final Aggregated Balances</h2>
+                <div class="overflow-y-auto flex-grow max-h-48 mb-4 border rounded-lg">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">User / Merchant</th>
+                                <th class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Net Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="balancesTable" class="bg-white divide-y divide-gray-200">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="mt-auto p-4 bg-gray-50 rounded-lg border flex items-center space-x-3">
+                    <div id="statusIcon" class="h-3 w-3 rounded-full bg-yellow-400"></div>
+                    <div class="text-sm text-gray-700">
+                        <span class="font-bold">Blockchain Status:</span> 
+                        <span id="bcStatus" class="font-mono ml-1">Waiting to run...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let myChart = null;
+
+        document.getElementById('runBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('runBtn');
+            const originalContent = btn.innerHTML;
+            
+            btn.disabled = true;
+            btn.innerHTML = `
+                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Simulating...
+            `;
+            btn.classList.replace('hover:scale-105', 'opacity-80');
+
+            try {
+                const response = await fetch('/run_simulation');
+                const data = await response.json();
+
+                // Show hidden elements with fade in
+                const metrics = document.getElementById('metricsCards');
+                const main = document.getElementById('mainContent');
+                
+                metrics.classList.remove('hidden');
+                main.classList.remove('hidden');
+                
+                // Small delay to allow display:block to apply before changing opacity
+                setTimeout(() => {
+                    metrics.classList.remove('opacity-0');
+                    main.classList.remove('opacity-0');
+                }, 50);
+
+                // Update Metrics (Animate numbers counting up could be added here for extra polish)
+                document.getElementById('beforeGas').innerText = data.metrics.before_gas;
+                document.getElementById('afterGas').innerText = data.metrics.after_gas;
+                document.getElementById('reduction').innerText = data.metrics.reduction;
+                
+                const statusEl = document.getElementById('bcStatus');
+                const iconEl = document.getElementById('statusIcon');
+                statusEl.innerText = data.blockchain_status;
+
+                if(data.blockchain_status.includes("Success")) {
+                    statusEl.className = "font-mono ml-1 text-green-600 font-bold";
+                    iconEl.className = "h-3 w-3 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]";
+                } else {
+                    statusEl.className = "font-mono ml-1 text-red-500 font-bold text-xs";
+                    iconEl.className = "h-3 w-3 rounded-full bg-red-500";
+                }
+
+                // Update Table
+                const tbody = document.getElementById('balancesTable');
+                tbody.innerHTML = '';
+                
+                // Sort balances so negative (users paying) are together, positive (merchants earning) are together
+                const sortedBalances = Object.entries(data.balances).sort((a, b) => b[1] - a[1]);
+                
+                for (const [entity, balance] of sortedBalances) {
+                    let isPositive = balance > 0;
+                    let isZero = balance === 0;
+                    
+                    let colorClass = isPositive ? 'text-green-600 bg-green-50' : (isZero ? 'text-gray-600' : 'text-red-600 bg-red-50');
+                    let prefix = isPositive ? '+' : '';
+                    
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-6 py-3 whitespace-nowrap font-medium text-gray-800">
+                                <div class="flex items-center">
+                                    <div class="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold mr-3 ${entity.startsWith('M') ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}">
+                                        ${entity}
+                                    </div>
+                                    ${entity.startsWith('M') ? 'Merchant ' + entity.replace('M', '') : 'User ' + entity.replace('U', '')}
+                                </div>
+                            </td>
+                            <td class="px-6 py-3 whitespace-nowrap text-right">
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-bold ${colorClass}">
+                                    ${prefix}${balance} $
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                // Update Chart
+                const ctx = document.getElementById('reductionChart').getContext('2d');
+                if (myChart) myChart.destroy();
+
+                myChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Traditional (Before)', 'PayFlow Rollup (After)'],
+                        datasets: [{
+                            label: 'Blockchain Transactions Needed',
+                            data: [data.metrics.before_calls, data.metrics.after_calls],
+                            backgroundColor: [
+                                'rgba(239, 68, 68, 0.8)', // Red
+                                'rgba(34, 197, 94, 0.8)'  // Green
+                            ],
+                            borderColor: [
+                                'rgb(220, 38, 38)',
+                                'rgb(22, 163, 74)'
+                            ],
+                            borderWidth: 2,
+                            borderRadius: 6,
+                            barPercentage: 0.6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Number of Transactions / Gas'
+                                },
+                                grid: {
+                                    borderDash: [5, 5]
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        },
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.raw + ' Gas Units';
+                                    }
+                                }
+                            }
+                        },
+                        animation: {
+                            duration: 1500,
+                            easing: 'easeOutQuart'
+                        }
+                    }
+                });
+
+            } catch (err) {
+                alert("Error running simulation: " + err);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+                btn.classList.replace('opacity-80', 'hover:scale-105');
+            }
+        });
+    </script>
+</body>
+</html>
